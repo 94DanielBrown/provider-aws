@@ -934,6 +934,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 		rg                  string
 		existingClusterSize int
 		desiredclusterSize  int
+		autoFailoverEnabled bool
 		want                error
 	}{
 		{
@@ -941,6 +942,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			e:                   &external{client: &fake.MockClient{}},
 			desiredclusterSize:  0,
 			existingClusterSize: 1,
+			autoFailoverEnabled: true,
 			want:                errors.New("at least 1 replica is required"),
 		},
 		{
@@ -948,6 +950,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			e:                   &external{client: &fake.MockClient{}},
 			desiredclusterSize:  7,
 			existingClusterSize: 1,
+			autoFailoverEnabled: true,
 			want:                errors.New("maximum of 5 replicas are allowed"),
 		},
 		{
@@ -959,6 +962,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			}},
 			desiredclusterSize:  4,
 			existingClusterSize: 1,
+			autoFailoverEnabled: true,
 			want:                errors.New("error increasing number of cache clusters"),
 		},
 		{
@@ -970,6 +974,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			}},
 			desiredclusterSize:  4,
 			existingClusterSize: 1,
+			autoFailoverEnabled: true,
 			want:                nil,
 		},
 		{
@@ -981,6 +986,7 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			}},
 			desiredclusterSize:  3,
 			existingClusterSize: 5,
+			autoFailoverEnabled: true,
 			want:                errors.New("error decreasing number of cache clusters"),
 		},
 		{
@@ -992,13 +998,38 @@ func TestUpdateReplicationGroupNumCacheClusters(t *testing.T) {
 			}},
 			desiredclusterSize:  3,
 			existingClusterSize: 5,
+			autoFailoverEnabled: true,
+			want:                nil,
+		},
+		{
+			name: "DecreaseReplicaTo1WithFailoverEnabled",
+			e: &external{client: &fake.MockClient{
+				MockDecreaseReplicaCount: func(ctx context.Context, _ *elasticache.DecreaseReplicaCountInput, opts []func(*elasticache.Options)) (*elasticache.DecreaseReplicaCountOutput, error) {
+					return &elasticache.DecreaseReplicaCountOutput{}, nil
+				},
+			}},
+			desiredclusterSize:  1,
+			existingClusterSize: 22,
+			autoFailoverEnabled: true,
+			want:                errors.New("Must have at least 2 replicas when automatic failover is enabled"),
+		},
+		{
+			name: "DecreaseReplicaTo1WithoutFailoverEnabled",
+			e: &external{client: &fake.MockClient{
+				MockDecreaseReplicaCount: func(ctx context.Context, _ *elasticache.DecreaseReplicaCountInput, opts []func(*elasticache.Options)) (*elasticache.DecreaseReplicaCountOutput, error) {
+					return &elasticache.DecreaseReplicaCountOutput{}, nil
+				},
+			}},
+			desiredclusterSize:  1,
+			existingClusterSize: 2,
+			autoFailoverEnabled: false,
 			want:                nil,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.e.updateReplicationGroupNumCacheClusters(ctx, tc.rg, tc.existingClusterSize, tc.desiredclusterSize)
+			err := tc.e.updateReplicationGroupNumCacheClusters(ctx, tc.rg, tc.existingClusterSize, tc.desiredclusterSize, tc.autoFailoverEnabled)
 			if diff := cmp.Diff(tc.want, err, test.EquateErrors()); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
 			}

@@ -64,6 +64,7 @@ const (
 	errReplicationGroupCacheClusterMinimum = "at least 1 replica is required"
 	errReplicationGroupCacheClusterMaximum = "maximum of 5 replicas are allowed"
 	errVersionInput                        = "unable to parse version number"
+	errFailoverEnabledOneReplica           = "Must have at least 2 replicas when automatic failover is enabled"
 )
 
 // SetupReplicationGroup adds a controller that reconciles ReplicationGroups.
@@ -263,7 +264,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	if elasticache.ReplicationGroupNumCacheClustersNeedsUpdate(cr.Spec.ForProvider, ccList) {
-		err := e.updateReplicationGroupNumCacheClusters(ctx, meta.GetExternalName(cr), len(ccList), aws.ToInt(cr.Spec.ForProvider.NumCacheClusters))
+		err := e.updateReplicationGroupNumCacheClusters(ctx, meta.GetExternalName(cr), len(ccList), aws.ToInt(cr.Spec.ForProvider.NumCacheClusters), *cr.Spec.ForProvider.AutomaticFailoverEnabled)
 		if err != nil {
 			return managed.ExternalUpdate{}, errorutils.Wrap(err, errModifyReplicationGroupCC)
 		}
@@ -334,13 +335,15 @@ func getCacheClusterList(ctx context.Context, client awselasticache.DescribeCach
 }
 
 // updateReplicationGroupNumCacheClusters updates the number of Cache Clusters in a replica group
-func (e *external) updateReplicationGroupNumCacheClusters(ctx context.Context, replicaGroup string, existingClusterSize, desiredClusterSize int) error {
+func (e *external) updateReplicationGroupNumCacheClusters(ctx context.Context, replicaGroup string, existingClusterSize, desiredClusterSize int, automaticFailoverEnabled bool) error {
 	// Cache clusters consist of 1 primary and 1-5 replicas.
 	// The AWS API modifies the number of replicas
-	newReplicaCount := desiredClusterSize - 1
+	newReplicaCount := desiredClusterSize
 	switch {
 	case newReplicaCount < 1:
 		return errors.New(errReplicationGroupCacheClusterMinimum)
+	case newReplicaCount == 1 && automaticFailoverEnabled != false:
+		return errors.New(errFailoverEnabledOneReplica)
 	case newReplicaCount > 5:
 		return errors.New(errReplicationGroupCacheClusterMaximum)
 	case desiredClusterSize > existingClusterSize:
