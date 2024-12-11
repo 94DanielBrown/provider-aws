@@ -18,6 +18,7 @@ package replicationgroup
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -264,7 +265,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	if elasticache.ReplicationGroupNumCacheClustersNeedsUpdate(cr.Spec.ForProvider, ccList) {
-		err := e.updateReplicationGroupNumCacheClusters(ctx, meta.GetExternalName(cr), len(ccList), aws.ToInt(cr.Spec.ForProvider.NumCacheClusters), *cr.Spec.ForProvider.AutomaticFailoverEnabled)
+		err := e.updateReplicationGroupNumCacheClusters(ctx, meta.GetExternalName(cr), len(ccList), aws.ToInt(cr.Spec.ForProvider.NumCacheClusters), *aws.Bool(*cr.Spec.ForProvider.AutomaticFailoverEnabled))
 		if err != nil {
 			return managed.ExternalUpdate{}, errorutils.Wrap(err, errModifyReplicationGroupCC)
 		}
@@ -340,9 +341,15 @@ func (e *external) updateReplicationGroupNumCacheClusters(ctx context.Context, r
 	// The AWS API modifies the number of replicas
 	newReplicaCount := desiredClusterSize
 	switch {
-	case newReplicaCount < 1:
-		return errors.New(errReplicationGroupCacheClusterMinimum)
-	case newReplicaCount == 1 && automaticFailoverEnabled != false:
+	case newReplicaCount < 0:
+		fmt.Printf("value of automaticFailoverEnabled is: %v", automaticFailoverEnabled)
+		return errors.New("apparently newReplicaCount is smaller than 0")
+		// return errors.New(errReplicationGroupCacheClusterMinimum)
+	case automaticFailoverEnabled != false:
+		fmt.Printf("value of automaticFailoverEnabled is: %v", automaticFailoverEnabled)
+		return errors.New("automaticFailoverEnabled is not false")
+	case newReplicaCount == 0 && automaticFailoverEnabled != false:
+		fmt.Printf("value of automaticFailoverEnabled is: %v", automaticFailoverEnabled)
 		return errors.New(errFailoverEnabledOneReplica)
 	case newReplicaCount > 5:
 		return errors.New(errReplicationGroupCacheClusterMaximum)
