@@ -68,6 +68,12 @@ func ToIntAsInt32(v int) *int32 {
 	return &val32
 }
 
+// ZeroInt32 converts the supplied 0 int for use with the AWS Go SDK.
+func ZeroToInt32(v int) *int32 {
+	val32 := int32(v)
+	return &val32
+}
+
 // Int32Address returns the given *int in the form of *int32.
 func ToIntAsInt32Ptr(v *int) *int32 {
 	if v == nil {
